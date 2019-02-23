@@ -3,14 +3,16 @@ import json
 from time import time
 from urllib.parse import urlparse
 from uuid import uuid4
-from requests import requests
+import requests
 from flask import Flask,jsonify,request
 class Block(object):
     def __init__(self):
         self.chain=[]
         self.current_transaction=[]
         self.node=set()
+        self.psudohashcode={}
         self.new_block(previous_hash=None,proof=100)
+        
     def register_node(self,address):
         """
         Add a new node to the list of nodes
@@ -40,7 +42,7 @@ class Block(object):
             current_index+=1
         return True
     def consensus_conflict(self):
-        neighbours=self.nodes
+        neighbours=self.node
         new_chain=None
 
         max_length=len(self.chain)
@@ -65,12 +67,14 @@ class Block(object):
         :param previous_hash: (Optional) <str> Hash of previous Block
         :return: <dict> New Block
         """
+        if(previous_hash is None):
+            self.psudohash(self,proof)
         block={
             'index':len(self.chain)+1,
             'timeStamp':time(),
             'transaction':self.current_transaction,
             'proof':proof,
-            'previous_hash':previous_hash or self.hash
+            'previous_hash':previous_hash or self.psudohashcode
         }
         self.current_transaction=[]
         self.chain.append(block)
@@ -78,12 +82,24 @@ class Block(object):
         
     @staticmethod
     def hash(block):
+        
         block_string=json.dumps(block,sort_keys=True).encode()
+        
         return hashlib.sha256(block_string).hexdigest()
+    @staticmethod
+    def psudohash(self,proof):
+        psudoblock={
+            'index':len(self.chain)+1,
+            'timeStamp':time(),
+            'transaction':self.current_transaction,
+            'proof':proof,
+        }
+        self.psudohashcode=hashlib.sha256(json.dumps(psudoblock,sort_keys=True).encode()).hexdigest()
+
     @property
     def last_block(self):
         return self.chain[-1]
-    def new_transasction(self,sender,recipient,amount):
+    def new_transaction(self,sender,recipient,amount):
         """
         Creates a new transaction to go into the next mined Block
         :param sender: <str> Address of the Sender
@@ -122,7 +138,9 @@ blockchain=Block()
 
 @app.route('/mine',methods=['GET'])
 def mine():
+    
     last_block=blockchain.last_block
+    
     proof=blockchain.proof_of_work(last_block)
 
     blockchain.new_transaction(sender="0",recipient=node_identifier,amount=1,)
@@ -163,9 +181,9 @@ def register():
 
     nodes=values.get('nodes')
 
-    if node is None:
+    if nodes is None:
         return "Error:Please Supply a valid list of Nodes",400
-    for Node in node:
+    for Node in nodes:
         blockchain.register_node(Node)
     
     response={
